@@ -1,59 +1,72 @@
-#include <Arduino.h>
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
-// Wokwi WiFi
-const char* ssid = "Wokwi-GUEST";
-const char* password = "";
+from app.db.database import get_db
+from app.db import models
+from app.schemas.iot_schemas import (
+    SensorDataCreateRequest,
+    SensorDataResponse
+)
 
-// 🔥 Render backend + sensor_id
-const char* serverUrl =
-  "https://backend-0ngr.onrender.com/iot/sensors/1/data";
+router = APIRouter(
+    prefix="/iot",
+    tags=["IoT"]
+)
 
-WiFiClientSecure client;
-HTTPClient http;
+@router.post(
+    "/sensors/{sensor_id}/data",
+    response_model=SensorDataResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Send sensor data"
+)
+def receive_sensor_data(
+    sensor_id: int,
+    data: SensorDataCreateRequest,
+    db: Session = Depends(get_db)
+):
+    # 1️⃣ Сенсор
+    sensor = db.query(models.Sensor).filter(
+        models.Sensor.id == sensor_id
+    ).first()
+    if not sensor:
+        raise HTTPException(404, "Sensor not found")
 
-void setup() {
-  Serial.begin(115200);
+    # 2️⃣ Пристрій
+    device = db.query(models.IoTDevice).filter(
+        models.IoTDevice.id == sensor.device_id
+    ).first()
 
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
+    # 3️⃣ Будівля
+    building = db.query(models.Building).filter(
+        models.Building.id == device.building_id
+    ).first()
 
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
+    value = data.value
+    severity = "normal"
+    incident_created = False
 
-  Serial.println("\nWiFi connected");
+    # 4️⃣ Пороги
+    if value >= sensor.threshold_critical:
+        severity = "critical"
+    elif value >= sensor.threshold_warning:
+        severity = "warning"
 
-  // ⚠️ Wokwi / ESP32 — відключаємо перевірку SSL сертифіката
-  client.setInsecure();
-}
+    # 5️⃣ Створення інциденту
+    if severity in ("warning", "critical"):
+        incident = models.Incident(
+            building_id=building.id,
+            sensor_id=sensor.id,
+            severity=severity,
+            status="open",
+            description=f"{sensor.sensor_type.upper()} = {value} {sensor.unit}"
+        )
+        db.add(incident)
+        db.commit()
+        incident_created = True
 
-void loop() {
-  // 1️⃣ Вимірювання газу (емуляція)
-  int gasValue = random(1, 2000);
-
-  Serial.print("CO2 value: ");
-  Serial.println(gasValue);
-
-  // 2️⃣ Надсилання на бек
-  if (WiFi.status() == WL_CONNECTED) {
-    http.begin(client, serverUrl);
-    http.addHeader("Content-Type", "application/json");
-
-    String body = "{\"value\": " + String(gasValue) + "}";
-
-    int responseCode = http.POST(body);
-
-    Serial.print("Server response: ");
-    Serial.println(responseCode);
-
-    http.end();
-  } else {
-    Serial.println("WiFi disconnected");
-  }
-
-  delay(5000);
-}
+    return SensorDataResponse(
+        sensor_id=sensor.id,
+        value=value,
+        severity=severity,
+        incident_created=incident_created
+    )
