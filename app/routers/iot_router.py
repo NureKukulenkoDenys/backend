@@ -24,19 +24,19 @@ def receive_sensor_data(
     data: SensorDataCreateRequest,
     db: Session = Depends(get_db)
 ):
-    # 1️⃣ Сенсор
+    
     sensor = db.query(models.Sensor).filter(
         models.Sensor.id == sensor_id
     ).first()
     if not sensor:
         raise HTTPException(404, "Sensor not found")
 
-    # 2️⃣ Пристрій
+   
     device = db.query(models.IoTDevice).filter(
         models.IoTDevice.id == sensor.device_id
     ).first()
 
-    # 3️⃣ Будівля
+    
     building = db.query(models.Building).filter(
         models.Building.id == device.building_id
     ).first()
@@ -45,13 +45,13 @@ def receive_sensor_data(
     severity = "normal"
     incident_created = False
 
-    # 4️⃣ Пороги
+    
     if value >= sensor.threshold_critical:
         severity = "critical"
     elif value >= sensor.threshold_warning:
         severity = "warning"
 
-    # 5️⃣ Створення інциденту
+    
     if severity in ("warning", "critical"):
         incident = models.Incident(
             building_id=building.id,

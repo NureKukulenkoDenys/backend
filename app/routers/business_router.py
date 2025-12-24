@@ -12,9 +12,7 @@ router = APIRouter(
 )
 
 
-# ----------------------------------
-# GET CURRENT BUSINESS USER PROFILE
-# ----------------------------------
+
 @router.get(
     "/me",
     response_model=business_schemas.BusinessUserResponse
@@ -33,9 +31,7 @@ def get_my_profile(
     )
 
 
-# ----------------------------------
-# GET ALL BUILDINGS OF CURRENT BUSINESS
-# ----------------------------------
+
 @router.get(
     "/buildings",
     response_model=list[business_schemas.BusinessBuildingResponse]
@@ -67,10 +63,7 @@ def get_my_buildings(
     ]
 
 
-# ----------------------------------
-# GET IOT DEVICES OF A BUILDING
-# ONLY BUSINESS ROLE
-# ----------------------------------
+
 @router.get(
     "/buildings/{building_id}/devices",
     response_model=list[business_schemas.BusinessDeviceResponse]
@@ -119,10 +112,7 @@ def get_building_devices(
         for d in devices
     ]
 
-    # ----------------------------------
-# GET ALL INCIDENTS OF CURRENT BUSINESS
-# ONLY BUSINESS ROLE
-# ----------------------------------
+ 
 @router.get(
     "/incidents",
     response_model=list[business_schemas.BusinessIncidentResponse]
@@ -158,10 +148,7 @@ def get_business_incidents(
     ]
 
 
-# ----------------------------------
-# GET ONE INCIDENT DETAILS
-# ONLY BUSINESS ROLE
-# ----------------------------------
+
 @router.get(
     "/incidents/{incident_id}",
     response_model=business_schemas.BusinessIncidentDetailResponse
@@ -204,10 +191,7 @@ def get_business_incident(
 
 
 
-# ----------------------------------
-# ACKNOWLEDGE INCIDENT
-# ONLY BUSINESS ROLE
-# ----------------------------------
+
 @router.post(
     "/incidents/{incident_id}/acknowledge",
     status_code=status.HTTP_200_OK
@@ -238,13 +222,13 @@ def acknowledge_incident(
             detail="Incident not found or access denied"
         )
 
-    # ❗ Якщо вже підтверджено
+   
     if incident.status == "acknowledged":
         return {
             "message": "Incident already acknowledged"
         }
 
-    # ✅ Підтверджуємо інцидент
+    
     incident.status = "acknowledged"
     db.commit()
 
@@ -282,10 +266,7 @@ def create_building(
 
     return new_building
 
-# ----------------------------------
-# DELETE BUILDING
-# ONLY BUSINESS ROLE
-# ----------------------------------
+
 @router.delete(
     "/buildings/{building_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -299,7 +280,7 @@ def delete_building(
 ):
     business_user: models.BusinessUser = user_data["user"]
 
-    # 🔒 Перевірка: будівля належить бізнесу
+    
     building = (
         db.query(models.Building)
         .filter(
@@ -315,7 +296,7 @@ def delete_building(
             detail="Building not found or access denied"
         )
 
-    # 🚨 1. Перевірка НЕ вирішених інцидентів
+    
     active_incidents = (
         db.query(models.Incident)
         .filter(
@@ -331,7 +312,7 @@ def delete_building(
             detail="Cannot delete building while there are unresolved incidents"
         )
 
-    # 🚨 2. Перевірка IoT-пристроїв
+  
     devices_count = (
         db.query(models.IoTDevice)
         .filter(models.IoTDevice.building_id == building_id)
@@ -344,88 +325,20 @@ def delete_building(
             detail="Cannot delete building while IoT devices are attached"
         )
 
-    # ✅ ВСІ УМОВИ ВИКОНАНІ — МОЖНА ВИДАЛЯТИ
+   
     db.delete(building)
     db.commit()
 
     return
 
 
-
-# ----------------------------------
-# CREATE IOT DEVICE FOR BUILDING
-# ONLY BUSINESS ROLE
-# ----------------------------------
-@router.post(
-    "/buildings/{building_id}/devices",
-    response_model=business_schemas.BusinessDeviceCreateResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Add IoT device to building",
-    description="Додати IoT-пристрій до будівлі поточного бізнесу"
+@router.get(
+    "/devices/{device_id}/sensors",
+    response_model=list[business_schemas.BusinessSensorResponse],
+    summary="Get sensors for IoT device",
+    description="Отримати всі сенсори вибраного IoT-пристрою, що належить бізнесу"
 )
-def create_device_for_building(
-    building_id: int,
-    device_data: business_schemas.BusinessDeviceCreateRequest,
-    user_data=Depends(role_required(["business"])),
-    db: Session = Depends(get_db)
-):
-    business_user: models.BusinessUser = user_data["user"]
-
-    # 🔒 Перевірка: будівля належить цьому бізнесу
-    building = (
-        db.query(models.Building)
-        .filter(
-            models.Building.id == building_id,
-            models.Building.business_user_id == business_user.id
-        )
-        .first()
-    )
-
-    if not building:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Building not found or access denied"
-        )
-
-    # 🔁 Перевірка унікальності серійного номера
-    existing_device = (
-        db.query(models.IoTDevice)
-        .filter(models.IoTDevice.serial_number == device_data.serial_number)
-        .first()
-    )
-
-    if existing_device:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Device with this serial number already exists"
-        )
-
-    # ✅ Створення пристрою
-    new_device = models.IoTDevice(
-        building_id=building_id,
-        serial_number=device_data.serial_number,
-        model=device_data.model,
-        supports_valve=device_data.supports_valve,
-        active=True
-    )
-
-    db.add(new_device)
-    db.commit()
-    db.refresh(new_device)
-
-    return new_device
-
-# ----------------------------------
-# DELETE IOT DEVICE
-# ONLY BUSINESS ROLE
-# ----------------------------------
-@router.delete(
-    "/devices/{device_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete IoT device",
-    description="Видалити IoT-пристрій, що належить поточному бізнесу"
-)
-def delete_iot_device(
+def get_device_sensors(
     device_id: int,
     user_data=Depends(role_required(["business"])),
     db: Session = Depends(get_db)
@@ -446,35 +359,88 @@ def delete_iot_device(
     if not device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Device not found or access denied"
+            detail="IoT device not found or access denied"
         )
 
-    db.delete(device)
-    db.commit()
+    # ✅ Повертаємо всі сенсори цього пристрою
+    return device.sensors
 
-    # 204 — успішно, без тіла відповіді
-    return
 
-# ----------------------------------
-# CREATE SENSOR FOR DEVICE
-# ONLY BUSINESS ROLE
-# ----------------------------------
+
 @router.post(
-    "/devices/{device_id}/sensors",
-    response_model=business_schemas.BusinessSensorCreateResponse,
+    "/buildings/{building_id}/devices",
+    response_model=business_schemas.BusinessDeviceCreateResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Add sensor to IoT device",
-    description="Додати сенсор до IoT-пристрою поточного бізнесу"
+    summary="Add IoT device to building",
+    description="Додати IoT-пристрій до будівлі поточного бізнесу"
 )
-def create_sensor_for_device(
-    device_id: int,
-    sensor_data: business_schemas.BusinessSensorCreateRequest,
+def create_device_for_building(
+    building_id: int,
+    device_data: business_schemas.BusinessDeviceCreateRequest,
     user_data=Depends(role_required(["business"])),
     db: Session = Depends(get_db)
 ):
     business_user: models.BusinessUser = user_data["user"]
 
-    # 🔒 Перевірка: пристрій належить бізнесу
+    
+    building = (
+        db.query(models.Building)
+        .filter(
+            models.Building.id == building_id,
+            models.Building.business_user_id == business_user.id
+        )
+        .first()
+    )
+
+    if not building:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Building not found or access denied"
+        )
+
+    
+    existing_device = (
+        db.query(models.IoTDevice)
+        .filter(models.IoTDevice.serial_number == device_data.serial_number)
+        .first()
+    )
+
+    if existing_device:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Device with this serial number already exists"
+        )
+
+
+    new_device = models.IoTDevice(
+        building_id=building_id,
+        serial_number=device_data.serial_number,
+        model=device_data.model,
+        supports_valve=device_data.supports_valve,
+        active=True
+    )
+
+    db.add(new_device)
+    db.commit()
+    db.refresh(new_device)
+
+    return new_device
+
+
+@router.delete(
+    "/devices/{device_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete IoT device",
+    description="Видалити IoT-пристрій, що належить поточному бізнесу"
+)
+def delete_iot_device(
+    device_id: int,
+    user_data=Depends(role_required(["business"])),
+    db: Session = Depends(get_db)
+):
+    business_user: models.BusinessUser = user_data["user"]
+
+    
     device = (
         db.query(models.IoTDevice)
         .join(models.Building, models.IoTDevice.building_id == models.Building.id)
@@ -491,7 +457,46 @@ def create_sensor_for_device(
             detail="Device not found or access denied"
         )
 
-    # 🔒 Перевірка порогів
+    db.delete(device)
+    db.commit()
+
+    
+    return
+
+
+@router.post(
+    "/devices/{device_id}/sensors",
+    response_model=business_schemas.BusinessSensorCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add sensor to IoT device",
+    description="Додати сенсор до IoT-пристрою поточного бізнесу"
+)
+def create_sensor_for_device(
+    device_id: int,
+    sensor_data: business_schemas.BusinessSensorCreateRequest,
+    user_data=Depends(role_required(["business"])),
+    db: Session = Depends(get_db)
+):
+    business_user: models.BusinessUser = user_data["user"]
+
+    
+    device = (
+        db.query(models.IoTDevice)
+        .join(models.Building, models.IoTDevice.building_id == models.Building.id)
+        .filter(
+            models.IoTDevice.id == device_id,
+            models.Building.business_user_id == business_user.id
+        )
+        .first()
+    )
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found or access denied"
+        )
+
+    
     if sensor_data.threshold_warning >= sensor_data.threshold_critical:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -530,7 +535,7 @@ def delete_sensor(
 ):
     business_user: models.BusinessUser = user_data["user"]
 
-    # 🔎 Перевірка: сенсор належить бізнесу
+   
     sensor = (
         db.query(models.Sensor)
         .join(models.IoTDevice, models.Sensor.device_id == models.IoTDevice.id)
@@ -548,7 +553,7 @@ def delete_sensor(
             detail="Sensor not found or access denied"
         )
 
-    # 🚨 Перевірка: чи є НЕ врегульовані інциденти
+    
     active_incidents = (
         db.query(models.Incident)
         .filter(
@@ -564,7 +569,7 @@ def delete_sensor(
             detail="Cannot delete sensor while unresolved incidents exist"
         )
 
-    # ✅ Видалення сенсора (sensor_metrics видаляться каскадно)
+    
     db.delete(sensor)
     db.commit()
 

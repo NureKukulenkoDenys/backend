@@ -12,9 +12,7 @@ router = APIRouter(
 )
 
 
-# ----------------------------------
-# GET CURRENT EMERGENCY SERVICE PROFILE
-# ----------------------------------
+
 @router.get(
     "/me",
     response_model=emergency_schemas.EmergencyServiceProfileResponse,
@@ -36,14 +34,14 @@ def get_my_profile(
     )
 
 
-# ----------------------------------
-# GET INCIDENTS THAT REQUIRE RESPONSE
-# ----------------------------------
+
+from sqlalchemy import or_
+
 @router.get(
     "/incidents",
     response_model=list[emergency_schemas.EmergencyIncidentResponse],
     summary="Get incidents that require response",
-    description="Отримати інциденти, що потребують реагування екстренної служби"
+    description="Отримати інциденти, за які відповідає служба або які ще не призначені"
 )
 def get_emergency_incidents(
     user_data=Depends(role_required(["emergency_service"])),
@@ -55,8 +53,11 @@ def get_emergency_incidents(
         db.query(models.Incident)
         .join(models.Building, models.Incident.building_id == models.Building.id)
         .filter(
-            models.Building.emergency_service_id == emergency_service.id,
-            models.Incident.status.in_(["open", "acknowledged"])
+            models.Incident.status.in_(["open", "acknowledged"]),
+            or_(
+                models.Building.emergency_service_id == emergency_service.id,
+                models.Building.emergency_service_id.is_(None)
+            )
         )
         .order_by(models.Incident.detected_at.desc())
         .all()
@@ -64,9 +65,30 @@ def get_emergency_incidents(
 
     return incidents
 
-# ----------------------------------
-# GET BUILDING DETAILS FOR EMERGENCY SERVICE
-# ----------------------------------
+@router.get(
+    "/buildings",
+    response_model=list[emergency_schemas.EmergencyBuildingDetailResponse],
+    summary="Get buildings assigned to emergency service",
+    description="Отримати всі будівлі, закріплені за поточною екстренною службою"
+)
+def get_assigned_buildings(
+    user_data=Depends(role_required(["emergency_service"])),
+    db: Session = Depends(get_db)
+):
+    emergency_service: models.EmergencyService = user_data["user"]
+
+    buildings = (
+        db.query(models.Building)
+        .filter(models.Building.emergency_service_id == emergency_service.id)
+        .order_by(models.Building.id)
+        .all()
+    )
+
+    return buildings
+
+
+
+
 @router.get(
     "/buildings/{building_id}",
     response_model=emergency_schemas.EmergencyBuildingDetailResponse,
@@ -98,12 +120,9 @@ def get_emergency_building(
     return building
 
 
-# ----------------------------------
-# ACCEPT INCIDENT
-# ----------------------------------
-# ----------------------------------
-# ACCEPT INCIDENT
-# ----------------------------------
+
+from sqlalchemy import or_
+
 @router.post(
     "/incidents/{incident_id}/accept",
     status_code=status.HTTP_200_OK,
@@ -122,7 +141,10 @@ def accept_incident(
         .join(models.Building, models.Incident.building_id == models.Building.id)
         .filter(
             models.Incident.id == incident_id,
-            models.Building.emergency_service_id == emergency_service.id
+            or_(
+                models.Building.emergency_service_id == emergency_service.id,
+                models.Building.emergency_service_id.is_(None)
+            )
         )
         .first()
     )
@@ -133,13 +155,18 @@ def accept_incident(
             detail="Incident not found or access denied"
         )
 
+    # ❗ Можна взяти в роботу лише відкритий інцидент
     if incident.status != "open":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Incident cannot be accepted (current status: {incident.status})"
         )
 
-    # ✅ ВАЖЛИВО: встановлюємо обидва поля
+    # 🔗 Якщо будівля ще не закріплена — закріплюємо її за цією службою
+    if incident.building.emergency_service_id is None:
+        incident.building.emergency_service_id = emergency_service.id
+
+    # ✅ Приймаємо інцидент
     incident.status = "in_progress"
     incident.handled_by_service_id = emergency_service.id
 
@@ -150,13 +177,13 @@ def accept_incident(
         "message": "Incident accepted and taken into work",
         "incident_id": incident.id,
         "new_status": incident.status,
-        "handled_by_service_id": incident.handled_by_service_id
+        "handled_by_service_id": incident.handled_by_service_id,
+        "building_emergency_service_id": incident.building.emergency_service_id
     }
 
 
-# ----------------------------------
-# RESOLVE INCIDENT
-# ----------------------------------
+
+
 @router.post(
     "/incidents/{incident_id}/resolve",
     status_code=status.HTTP_200_OK,
@@ -186,14 +213,14 @@ def resolve_incident(
             detail="Incident not found or access denied"
         )
 
-    # ❗ Завершити можна лише інцидент у роботі
+    
     if incident.status != "in_progress":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Incident cannot be resolved (current status: {incident.status})"
         )
 
-    # ✅ Завершуємо інцидент
+   
     incident.status = "resolved"
     db.commit()
 
@@ -204,9 +231,7 @@ def resolve_incident(
     }
 
 
-# ----------------------------------
-# GET ACCEPTED INCIDENTS (IN PROGRESS)
-# ----------------------------------
+
 @router.get(
     "/incidents/accepted",
     response_model=list[emergency_schemas.EmergencyIncidentResponse],
@@ -233,9 +258,7 @@ def get_accepted_incidents(
     return incidents
 
 
-# ----------------------------------
-# GET RESOLVED INCIDENTS (HISTORY)
-# ----------------------------------
+
 @router.get(
     "/incidents/history",
     response_model=list[emergency_schemas.EmergencyIncidentResponse],
@@ -260,9 +283,7 @@ def get_resolved_incidents(
 
     return incidents
 
-# ----------------------------------
-# GET INCIDENT LOCATION (MAP)
-# ----------------------------------
+
 @router.get(
     "/incidents/{incident_id}/location",
     response_model=emergency_schemas.EmergencyIncidentLocationResponse,

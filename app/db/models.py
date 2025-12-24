@@ -12,9 +12,7 @@ from sqlalchemy.orm import relationship
 from app.db.database import Base
 
 
-# ---------------------------
-# Administrators
-# ---------------------------
+
 class Administrator(Base):
     __tablename__ = "administrators"
 
@@ -27,9 +25,7 @@ class Administrator(Base):
     emergency_services = relationship("EmergencyService", back_populates="admin")
 
 
-# ---------------------------
-# Emergency Services
-# ---------------------------
+
 class EmergencyService(Base):
     __tablename__ = "emergency_services"
 
@@ -44,7 +40,7 @@ class EmergencyService(Base):
     admin = relationship("Administrator", back_populates="emergency_services")
 
 
-# ---------------------------
+
 class BusinessUser(Base):
     __tablename__ = "business_users"
 
@@ -57,9 +53,7 @@ class BusinessUser(Base):
     is_blocked = Column(Boolean, default=False, nullable=False)
 
 
-# ---------------------------
-# Buildings
-# ---------------------------
+
 class Building(Base):
     __tablename__ = "buildings"
 
@@ -87,7 +81,7 @@ class Building(Base):
         cascade="all, delete-orphan"
     )
 
-    # ✅ корисн
+    
     business_user = relationship("BusinessUser")
     emergency_service = relationship("EmergencyService")
 
@@ -110,7 +104,6 @@ class IoTDevice(Base):
     supports_valve = Column(Boolean, nullable=False)
     active = Column(Boolean, nullable=False)
 
-    # ✅ ДОДАТИ ОЦЕ
     building = relationship("Building")
 
     sensors = relationship(
@@ -139,7 +132,6 @@ class Incident(Base):
     status = Column(String, nullable=False)
     description = Column(String, nullable=True)
 
-    # ✅ ОЦЕ КРИТИЧНО ДОДАТИ
     handled_by_service_id = Column(
         Integer,
         ForeignKey("emergency_services.id"),
@@ -157,9 +149,6 @@ class Incident(Base):
 
 
 
-# ---------------------------
-# Valves
-# ---------------------------
 class Valve(Base):
     __tablename__ = "valves"
 
@@ -177,9 +166,7 @@ class Valve(Base):
     last_closed_at = Column(DateTime, nullable=True)
 
 
-# ---------------------------
-# Sensors
-# ---------------------------
+
 class Sensor(Base):
     __tablename__ = "sensors"
 
@@ -196,10 +183,8 @@ class Sensor(Base):
     threshold_warning = Column(Integer, nullable=False)
     threshold_critical = Column(Integer, nullable=False)
 
-    # 🔁 звʼязок назад
     device = relationship("IoTDevice", back_populates="sensors")
 
-    # ✅ каскад на метрики
     metrics = relationship(
         "SensorMetric",
         back_populates="sensor",

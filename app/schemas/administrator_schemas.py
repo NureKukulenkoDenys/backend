@@ -223,4 +223,15 @@ class AdminIncidentStatisticsResponse(BaseModel):
     warning: int
     critical: int
 
+class AdminBuildingResponse(BaseModel):
+    id: int
+    name: str
+    address: str
+    latitude: float
+    longitude: float
+    business_user_id: int
+    emergency_service_id: int | None
+
+    class Config:
+        orm_mode = True
 

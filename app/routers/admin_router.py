@@ -11,11 +11,7 @@ from app.core.security import role_required
 router = APIRouter(prefix="/admin", tags=["Administrators"])
 
 
-# ----------------------------------
-# GET ALL EMERGENCY SERVICES
-# ONLY ADMIN CAN ACCESS
-# ⚠️ СТАТИЧНИЙ ROUTE — МАЄ БУТИ ПЕРШИМ
-# ----------------------------------
+
 @router.get(
     "/emergency-services",
     response_model=administrator_schemas.EmergencyServiceListResponse,
@@ -32,10 +28,7 @@ def get_all_emergency_services(
         emergency_services=services
     )
 
-# ----------------------------------
-# GET ONE EMERGENCY SERVICE BY ID
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+
 @router.get(
     "/emergency-services/{service_id}",
     response_model=administrator_schemas.EmergencyServiceDetailResponse,
@@ -61,10 +54,7 @@ def get_emergency_service(
 
     return service
 
-# ----------------------------------
-# CREATE EMERGENCY SERVICE
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+
 @router.post(
     "/emergency-services",
     response_model=administrator_schemas.EmergencyServiceCreateResponse,
@@ -77,7 +67,7 @@ def create_emergency_service(
     db: Session = Depends(get_db),
     user=Depends(role_required(["administrator"]))
 ):
-    # 🔍 Перевірка унікальності email
+
     existing_service = (
         db.query(models.EmergencyService)
         .filter(models.EmergencyService.email == data.email)
@@ -90,13 +80,12 @@ def create_emergency_service(
             detail="Emergency service with this email already exists"
         )
 
-    # 🔐 Хешування пароля
     hashed_password = bcrypt.hashpw(
         data.password.encode("utf-8"),
         bcrypt.gensalt()
     ).decode("utf-8")
 
-    # ✅ Створення служби
+
     service = models.EmergencyService(
         name=data.name,
         email=data.email,
@@ -134,7 +123,7 @@ def delete_emergency_service(
             detail="Emergency service not found"
         )
 
-    # 🔒 Перевірка: чи є привʼязані будівлі
+
     buildings_count = (
         db.query(models.Building)
         .filter(models.Building.emergency_service_id == service_id)
@@ -150,13 +139,28 @@ def delete_emergency_service(
     db.delete(service)
     db.commit()
 
-    # 204 — без тіла відповіді
+
     return
 
-# ----------------------------------
-# ASSIGN BUILDINGS TO EMERGENCY SERVICE
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+@router.get(
+    "/buildings/unassigned",
+    response_model=list[administrator_schemas.AdminBuildingResponse],
+    summary="Get unassigned buildings",
+    description="Отримати всі будівлі, які не закріплені за жодною екстреною службою"
+)
+def get_unassigned_buildings(
+    db: Session = Depends(get_db),
+    user=Depends(role_required(["administrator"]))
+):
+    buildings = (
+        db.query(models.Building)
+        .filter(models.Building.emergency_service_id.is_(None))
+        .order_by(models.Building.id)
+        .all()
+    )
+
+    return buildings
+
 @router.post(
     "/emergency-services/{service_id}/assign-buildings",
     response_model=administrator_schemas.AssignBuildingsResponse,
@@ -169,7 +173,7 @@ def assign_buildings_to_emergency_service(
     db: Session = Depends(get_db),
     user=Depends(role_required(["administrator"]))
 ):
-    # 🔍 Перевірка служби
+
     service = (
         db.query(models.EmergencyService)
         .filter(models.EmergencyService.id == service_id)
@@ -188,7 +192,7 @@ def assign_buildings_to_emergency_service(
             detail="Building IDs list cannot be empty"
         )
 
-    # 🔍 Отримуємо будівлі
+
     buildings = (
         db.query(models.Building)
         .filter(models.Building.id.in_(data.building_ids))
@@ -204,7 +208,7 @@ def assign_buildings_to_emergency_service(
             detail=f"Buildings not found: {list(missing_ids)}"
         )
 
-    # ✅ Призначення служби будівлям
+
     for building in buildings:
         building.emergency_service_id = service_id
 
@@ -215,10 +219,7 @@ def assign_buildings_to_emergency_service(
         assigned_buildings=data.building_ids
     )
 
-# ----------------------------------
-# GET ALL BUSINESSES
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+
 @router.get(
     "/businesses",
     response_model=administrator_schemas.BusinessListResponse,
@@ -243,10 +244,7 @@ def get_all_businesses(
         ]
     )
 
-# ----------------------------------
-# GET BUSINESS BY ID
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+
 @router.get(
     "/businesses/{business_id}",
     response_model=administrator_schemas.BusinessDetailResponse,
@@ -277,10 +275,7 @@ def get_business_by_id(
         created_at=business.created_at
     )
 
-# ----------------------------------
-# DELETE BUSINESS
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+
 @router.delete(
     "/businesses/{business_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -304,24 +299,15 @@ def delete_business(
             detail="Business not found"
         )
 
-    """
-    ⚠️ ВАЖЛИВО:
-    Перед видаленням бізнесу переконайся, що:
-    - у моделях налаштовано cascade="all, delete"
-      або
-    - ти явно видаляєш повʼязані сутності (будівлі, девайси, інциденти)
-    """
+    
 
     db.delete(business)
     db.commit()
 
-    # 204 — успішно, без тіла відповіді
+
     return
 
-# ----------------------------------
-# BLOCK BUSINESS
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+
 @router.post(
     "/businesses/{business_id}/block",
     status_code=status.HTTP_200_OK,
@@ -360,10 +346,7 @@ def block_business(
         "status": "blocked"
     }
 
-# ----------------------------------
-# GET ALL BUILDINGS
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+
 @router.get(
     "/buildings",
     response_model=administrator_schemas.AdminBuildingListResponse,
@@ -380,10 +363,7 @@ def get_all_buildings(
         buildings=buildings
     )
 
-# ----------------------------------
-# GET BUILDING BY ID
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+
 @router.get(
     "/buildings/{building_id}",
     response_model=administrator_schemas.AdminBuildingDetailResponse,
@@ -409,10 +389,7 @@ def get_building_by_id(
 
     return building
 
-# ----------------------------------
-# GET ALL IOT DEVICES
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+
 @router.get(
     "/devices",
     response_model=administrator_schemas.AdminDeviceListResponse,
@@ -439,10 +416,7 @@ def get_all_devices(
 
     return administrator_schemas.AdminDeviceListResponse(devices=data)
 
-# ----------------------------------
-# GET ONE IOT DEVICE
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+
 @router.get(
     "/devices/{device_id}",
     response_model=administrator_schemas.AdminDeviceDetailResponse,
@@ -479,10 +453,36 @@ def get_device_detail(
         business_name=device.building.business_user.business_name
     )
 
-# ----------------------------------
-# GET ALL INCIDENTS
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+@router.get(
+    "/incidents/statistics",
+    response_model=administrator_schemas.AdminIncidentStatisticsResponse,
+    summary="Incidents statistics",
+    description="Статистика по інцидентах у системі"
+)
+def get_incident_statistics(
+    db: Session = Depends(get_db),
+    user=Depends(role_required(["administrator"]))
+):
+    total = db.query(models.Incident).count()
+
+    open_count = db.query(models.Incident).filter(models.Incident.status == "open").count()
+    acknowledged_count = db.query(models.Incident).filter(models.Incident.status == "acknowledged").count()
+    in_progress_count = db.query(models.Incident).filter(models.Incident.status == "in_progress").count()
+    resolved_count = db.query(models.Incident).filter(models.Incident.status == "resolved").count()
+
+    warning_count = db.query(models.Incident).filter(models.Incident.severity == "warning").count()
+    critical_count = db.query(models.Incident).filter(models.Incident.severity == "critical").count()
+
+    return administrator_schemas.AdminIncidentStatisticsResponse(
+        total_incidents=total,
+        open=open_count,
+        acknowledged=acknowledged_count,
+        in_progress=in_progress_count,
+        resolved=resolved_count,
+        warning=warning_count,
+        critical=critical_count
+    )
+
 @router.get(
     "/incidents",
     response_model=list[administrator_schemas.AdminIncidentResponse],
@@ -528,10 +528,7 @@ def get_all_incidents(
 
     return result
 
-# ----------------------------------
-# GET INCIDENT BY ID
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
+
 @router.get(
     "/incidents/{incident_id}",
     response_model=administrator_schemas.AdminIncidentDetailResponse,
@@ -589,45 +586,10 @@ def get_incident_detail(
     )
 
 
-# ----------------------------------
-# INCIDENTS STATISTICS
-# ONLY ADMIN CAN ACCESS
-# ----------------------------------
-@router.get(
-    "/incidents/statistics",
-    response_model=administrator_schemas.AdminIncidentStatisticsResponse,
-    summary="Incidents statistics",
-    description="Статистика по інцидентах у системі"
-)
-def get_incident_statistics(
-    db: Session = Depends(get_db),
-    user=Depends(role_required(["administrator"]))
-):
-    total = db.query(models.Incident).count()
-
-    open_count = db.query(models.Incident).filter(models.Incident.status == "open").count()
-    acknowledged_count = db.query(models.Incident).filter(models.Incident.status == "acknowledged").count()
-    in_progress_count = db.query(models.Incident).filter(models.Incident.status == "in_progress").count()
-    resolved_count = db.query(models.Incident).filter(models.Incident.status == "resolved").count()
-
-    warning_count = db.query(models.Incident).filter(models.Incident.severity == "warning").count()
-    critical_count = db.query(models.Incident).filter(models.Incident.severity == "critical").count()
-
-    return administrator_schemas.AdminIncidentStatisticsResponse(
-        total_incidents=total,
-        open=open_count,
-        acknowledged=acknowledged_count,
-        in_progress=in_progress_count,
-        resolved=resolved_count,
-        warning=warning_count,
-        critical=critical_count
-    )
 
 
-# -----------------------------
-# GET ALL ADMINISTRATORS
-# ONLY ADMIN CAN ACCESS
-# -----------------------------
+
+
 @router.get(
     "/all",
     response_model=administrator_schemas.AdministratorListResponse
@@ -651,10 +613,7 @@ def get_all_admins(
     return administrator_schemas.AdministratorListResponse(administrators=data)
 
 
-# -----------------------------
-# CREATE ADMINISTRATOR
-# ONLY ADMIN CAN ACCESS
-# -----------------------------
+
 @router.post(
     "",
     response_model=administrator_schemas.AdministratorDetailResponse,
@@ -665,7 +624,7 @@ def create_administrator(
     db: Session = Depends(get_db),
     user=Depends(role_required(["administrator"]))
 ):
-    # 🔍 Перевірка унікальності email
+
     existing_admin = (
         db.query(models.Administrator)
         .filter(models.Administrator.email == data.email)
@@ -678,7 +637,7 @@ def create_administrator(
             detail="Administrator with this email already exists"
         )
 
-    # 🔐 Хешування пароля
+    
     hashed_password = bcrypt.hashpw(
         data.password.encode("utf-8"),
         bcrypt.gensalt()
@@ -702,11 +661,7 @@ def create_administrator(
     )
 
 
-# -----------------------------
-# GET ONE ADMINISTRATOR BY ID
-# ONLY ADMIN CAN ACCESS
-# ❗ ДИНАМІЧНИЙ ROUTE — ПІСЛЯ СТАТИЧНИХ
-# -----------------------------
+
 @router.get(
     "/{admin_id}",
     response_model=administrator_schemas.AdministratorDetailResponse
@@ -732,10 +687,7 @@ def get_admin(
     )
 
 
-# -----------------------------
-# DELETE ADMINISTRATOR
-# ONLY ADMIN CAN ACCESS
-# -----------------------------
+
 @router.delete(
     "/{admin_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -749,7 +701,6 @@ def delete_administrator(
 ):
     current_admin: models.Administrator = user_data["user"]
 
-    # ❌ Заборона видалення самого себе
     if current_admin.id == admin_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

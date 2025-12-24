@@ -12,13 +12,10 @@ from app.db import models
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-# -----------------------------------
-# CREATE TOKEN
-# -----------------------------------
+
 def create_access_token(data: dict):
     to_encode = data.copy()
 
-    # sub MUST be a STRING according to JWT RFC
     if "sub" in to_encode:
         to_encode["sub"] = str(to_encode["sub"])
 
@@ -32,9 +29,6 @@ def create_access_token(data: dict):
     )
 
 
-# -----------------------------------
-# DECODE TOKEN
-# -----------------------------------
 def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(
@@ -55,9 +49,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         )
 
 
-# -----------------------------------
-# LOAD USER MODEL
-# -----------------------------------
+
 def get_current_user_db(
     token_data=Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -80,9 +72,7 @@ def get_current_user_db(
     return {"user": user, "role": role}
 
 
-# -----------------------------------
-# ROLE CHECKER
-# -----------------------------------
+
 def role_required(roles: List[str]):
     def wrapper(user_data=Depends(get_current_user_db)):
         if user_data["role"] not in roles:

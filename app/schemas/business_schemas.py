@@ -2,9 +2,7 @@ from pydantic import BaseModel, Field, constr, confloat
 from datetime import datetime
 
 
-# =========================
-# BUSINESS USER
-# =========================
+
 class BusinessUserResponse(BaseModel):
     id: int
     email: str
@@ -14,10 +12,16 @@ class BusinessUserResponse(BaseModel):
     class Config:
         orm_mode = True
 
+class BusinessSensorResponse(BaseModel):
+    id: int
+    sensor_type: str
+    unit: str
+    threshold_warning: int
+    threshold_critical: int
 
-# =========================
-# BUILDINGS
-# =========================
+    class Config:
+        from_attributes = True
+
 class BusinessBuildingResponse(BaseModel):
     id: int
     name: str
@@ -64,9 +68,7 @@ class BusinessBuildingCreateResponse(BaseModel):
         orm_mode = True
 
 
-# =========================
-# IOT DEVICES
-# =========================
+
 class BusinessDeviceResponse(BaseModel):
     id: int
     serial_number: str
@@ -108,9 +110,7 @@ class BusinessDeviceCreateResponse(BaseModel):
         orm_mode = True
 
 
-# =========================
-# SENSORS
-# =========================
+
 class BusinessSensorCreateRequest(BaseModel):
     sensor_type: constr(min_length=1) = Field(
         ...,
@@ -148,9 +148,7 @@ class BusinessSensorCreateResponse(BaseModel):
         orm_mode = True
 
 
-# =========================
-# INCIDENTS
-# =========================
+
 class BusinessIncidentResponse(BaseModel):
     id: int
     building_id: int
@@ -174,9 +172,7 @@ class BusinessIncidentAcknowledgeResponse(BaseModel):
     new_status: str
 
 
-# =========================
-# VALVES
-# =========================
+
 class BusinessValveResponse(BaseModel):
     device_id: int
     valve_number: int
